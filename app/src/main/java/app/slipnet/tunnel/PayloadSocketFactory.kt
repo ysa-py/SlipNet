@@ -6,14 +6,6 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
-import javax.net.ssl.SNIHostName
-import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLSocket
-import javax.net.ssl.SSLSocketFactory
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * JSch [SocketFactory] that sends a raw payload on the TCP socket before
@@ -65,19 +57,7 @@ class PayloadSocketFactory(
             val sniHost = tlsSni.ifBlank { host }
             Log.i(TAG, "Upgrading to TLS (SNI: $sniHost)")
 
-            val sslFactory = trustAllSslFactory()
-            val sslSocket = sslFactory.createSocket(
-                rawSocket, sniHost, port, true
-            ) as SSLSocket
-
-            val params = sslSocket.sslParameters
-            params.serverNames = listOf(SNIHostName(sniHost))
-            sslSocket.sslParameters = params
-
-            sslSocket.startHandshake()
-            Log.i(TAG, "TLS handshake complete (${sslSocket.session.protocol}, ${sslSocket.session.cipherSuite})")
-
-            return sslSocket
+            return TlsUtils.upgradeToTls(rawSocket, sniHost, port, TAG)
         }
 
         return rawSocket
@@ -86,17 +66,6 @@ class PayloadSocketFactory(
     override fun getInputStream(socket: Socket): InputStream = socket.getInputStream()
 
     override fun getOutputStream(socket: Socket): OutputStream = socket.getOutputStream()
-
-    private fun trustAllSslFactory(): SSLSocketFactory {
-        val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-        })
-        val ctx = SSLContext.getInstance("TLS")
-        ctx.init(null, trustAll, SecureRandom())
-        return ctx.socketFactory
-    }
 
     companion object {
         /**

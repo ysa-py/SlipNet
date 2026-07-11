@@ -4,7 +4,6 @@ import app.slipnet.util.AppLog as Log
 import vaydns.Vaydns
 import vaydns.VaydnsClient
 import java.lang.ref.WeakReference
-import java.net.ServerSocket
 
 /**
  * Bridge to the Go-based VayDNS library.
@@ -79,11 +78,11 @@ object VaydnsBridge {
         stopClient()
 
         var actualPort = listenPort
-        if (isPortInUse(listenPort)) {
+        if (PortUtils.isPortInUse(TAG, listenPort)) {
             Log.w(TAG, "Port $listenPort still in use, scanning for alternative port")
             var found = false
             for (alt in (listenPort + 1)..(listenPort + 10)) {
-                if (!isPortInUse(alt)) {
+                if (!PortUtils.isPortInUse(TAG, alt)) {
                     Log.i(TAG, "Using alternative port $alt (preferred $listenPort was still draining)")
                     actualPort = alt
                     found = true
@@ -92,7 +91,7 @@ object VaydnsBridge {
             }
             if (!found) {
                 Log.w(TAG, "All alternative ports busy, waiting up to 3s for port $listenPort")
-                if (!waitForPortAvailable(listenPort, 3_000)) {
+                if (!PortUtils.waitForPortAvailable(TAG, listenPort, 3_000)) {
                     return Result.failure(RuntimeException("Port $listenPort is still in use by a previous VayDNS instance"))
                 }
             }
@@ -152,7 +151,7 @@ object VaydnsBridge {
             if (newClient.isRunning) {
                 Log.i(TAG, "VayDNS client started successfully on port $actualPort")
 
-                if (verifySocks5Listening(listenHost, actualPort)) {
+                if (PortUtils.canConnect(TAG, listenHost, actualPort)) {
                     Log.d(TAG, "Tunnel verified listening on $listenHost:$actualPort")
                 } else {
                     Log.w(TAG, "Tunnel verification failed, but client reports running")
@@ -196,9 +195,9 @@ object VaydnsBridge {
         }
 
         if (port > 0) {
-            val portFree = if (isPortInUse(port)) {
+            val portFree = if (PortUtils.isPortInUse(TAG, port)) {
                 Log.w(TAG, "Port $port still in use after VayDNS stop, waiting briefly...")
-                waitForPortAvailable(port, 1000)
+                PortUtils.waitForPortAvailable(TAG, port, 1000)
             } else {
                 true
             }
@@ -229,42 +228,4 @@ object VaydnsBridge {
         }
     }
 
-    private fun waitForPortAvailable(port: Int, maxWaitMs: Long = 5000): Boolean {
-        val startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startTime < maxWaitMs) {
-            if (!isPortInUse(port)) {
-                return true
-            }
-            Log.d(TAG, "Waiting for port $port to be released...")
-            Thread.sleep(50)
-        }
-        return !isPortInUse(port)
-    }
-
-    private fun isPortInUse(port: Int): Boolean {
-        return try {
-            ServerSocket().use { serverSocket ->
-                serverSocket.reuseAddress = true
-                serverSocket.bind(java.net.InetSocketAddress("127.0.0.1", port))
-                false
-            }
-        } catch (e: java.net.BindException) {
-            true
-        } catch (e: Exception) {
-            Log.w(TAG, "Error checking port $port: ${e.message}")
-            true
-        }
-    }
-
-    private fun verifySocks5Listening(host: String, port: Int): Boolean {
-        return try {
-            java.net.Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress(host, port), 2000)
-                true
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Tunnel verify failed: ${e.message}")
-            false
-        }
-    }
 }
