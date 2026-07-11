@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -211,7 +212,10 @@ func handleSOCKS5(conn net.Conn, sshClient *ssh.Client, reqUser, reqPass string)
 			return
 		}
 
-		if string(uname) != reqUser || string(passwd) != reqPass {
+		// Constant-time comparison to avoid leaking credentials via timing.
+		userOK := subtle.ConstantTimeCompare(uname, []byte(reqUser)) == 1
+		passOK := subtle.ConstantTimeCompare(passwd, []byte(reqPass)) == 1
+		if !userOK || !passOK {
 			conn.Write([]byte{0x01, 0x01}) // auth failure
 			return
 		}

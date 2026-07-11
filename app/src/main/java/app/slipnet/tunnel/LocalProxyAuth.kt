@@ -3,6 +3,7 @@ package app.slipnet.tunnel
 import app.slipnet.util.AppLog as Log
 import java.io.InputStream
 import java.io.OutputStream
+import java.security.MessageDigest
 
 /**
  * Shared SOCKS5 local proxy authentication handler.
@@ -79,7 +80,11 @@ object LocalProxyAuth {
         readExactly(input, pBytes)
         val clientPass = String(pBytes, Charsets.UTF_8)
 
-        return if (clientUser == username && clientPass == password) {
+        // Constant-time comparison to avoid leaking credentials via timing.
+        // Non-short-circuiting `and` ensures both fields are always compared.
+        val userMatch = MessageDigest.isEqual(uBytes, username.orEmpty().toByteArray(Charsets.UTF_8))
+        val passMatch = MessageDigest.isEqual(pBytes, password.orEmpty().toByteArray(Charsets.UTF_8))
+        return if (userMatch and passMatch) {
             // Auth success
             output.write(byteArrayOf(0x01, 0x00))
             output.flush()
