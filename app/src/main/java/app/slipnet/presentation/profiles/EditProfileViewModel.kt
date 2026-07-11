@@ -2,6 +2,7 @@ package app.slipnet.presentation.profiles
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -970,7 +971,9 @@ class EditProfileViewModel @Inject constructor(
                 .build()
             val bridges = executeBuiltinRequest(client, request)
             if (bridges.isNotEmpty()) return bridges
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.d(TAG, "Builtin bridge fetch (direct) failed: ${e.message}")
+        }
 
         // Try domain fronting
         for (front in MOAT_FRONT_DOMAINS) {
@@ -982,7 +985,9 @@ class EditProfileViewModel @Inject constructor(
                     .build()
                 val bridges = executeBuiltinRequest(client, request)
                 if (bridges.isNotEmpty()) return bridges
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.d(TAG, "Builtin bridge fetch (front $front) failed: ${e.message}")
+            }
         }
         return null
     }
@@ -1001,7 +1006,9 @@ class EditProfileViewModel @Inject constructor(
                 .build()
             val lines = parseSettingsBridgeLines(client, request)
             if (lines != null) return lines
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.d(TAG, "Settings bridge fetch (direct) failed: ${e.message}")
+        }
 
         // Try domain fronting
         for (front in MOAT_FRONT_DOMAINS) {
@@ -1015,7 +1022,9 @@ class EditProfileViewModel @Inject constructor(
                     .build()
                 val lines = parseSettingsBridgeLines(client, request)
                 if (lines != null) return lines
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.d(TAG, "Settings bridge fetch (front $front) failed: ${e.message}")
+            }
         }
         return null
     }
@@ -1728,6 +1737,7 @@ class EditProfileViewModel @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "EditProfileVM"
         const val MAX_RESOLVERS = 10
         private const val BRIDGES_PER_TYPE = 2
 
