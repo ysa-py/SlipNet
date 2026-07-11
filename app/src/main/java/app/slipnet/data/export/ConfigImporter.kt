@@ -1,6 +1,7 @@
 package app.slipnet.data.export
 
 import android.util.Base64
+import android.util.Log
 import app.slipnet.domain.model.CongestionControl
 import app.slipnet.domain.model.DnsResolver
 import app.slipnet.domain.model.DnsTransport
@@ -94,6 +95,7 @@ sealed class ImportResult {
 class ConfigImporter @Inject constructor() {
 
     companion object {
+        private const val TAG = "ConfigImporter"
         private const val SCHEME = "slipnet://"
         private const val ENCRYPTED_SCHEME = "slipnet-enc://"
         private const val BUNDLE_ENCRYPTED_SCHEME = "slipnet-bundle-enc://"
@@ -270,6 +272,20 @@ class ConfigImporter @Inject constructor() {
         data class Success(val profile: ServerProfile) : ProfileParseResult()
         data class Warning(val message: String) : ProfileParseResult()
         data class Error(val message: String) : ProfileParseResult()
+    }
+
+    /**
+     * Decodes a base64-encoded field into a UTF-8 string. On failure (corrupt or
+     * truncated data) the empty string is returned, but the failure is logged so a
+     * silently-dropped credential can be diagnosed rather than vanishing without trace.
+     */
+    private fun decodeBase64Field(value: String, fieldName: String, lineNum: Int): String {
+        return try {
+            String(Base64.decode(value, Base64.NO_WRAP), Charsets.UTF_8)
+        } catch (e: Exception) {
+            Log.w(TAG, "Line $lineNum: failed to decode $fieldName, using empty value", e)
+            ""
+        }
     }
 
     private fun parseProfile(data: String, lineNum: Int): ProfileParseResult {
@@ -1269,12 +1285,8 @@ class ConfigImporter @Inject constructor() {
         val dohUrl = fields[21]
         val dnsTransport = DnsTransport.fromValue(fields[22])
         val sshAuthType = SshAuthType.fromValue(fields[23])
-        val sshPrivateKey = try {
-            String(Base64.decode(fields[24], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
-        val sshKeyPassphrase = try {
-            String(Base64.decode(fields[25], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
+        val sshPrivateKey = decodeBase64Field(fields[24], "sshPrivateKey", lineNum)
+        val sshKeyPassphrase = decodeBase64Field(fields[25], "sshKeyPassphrase", lineNum)
 
         if (name.isBlank()) {
             return ProfileParseResult.Error("Line $lineNum: Profile name is required")
@@ -1407,17 +1419,11 @@ class ConfigImporter @Inject constructor() {
         val dohUrl = fields[21]
         val dnsTransport = DnsTransport.fromValue(fields[22])
         val sshAuthType = SshAuthType.fromValue(fields[23])
-        val sshPrivateKey = try {
-            String(Base64.decode(fields[24], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
-        val sshKeyPassphrase = try {
-            String(Base64.decode(fields[25], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
+        val sshPrivateKey = decodeBase64Field(fields[24], "sshPrivateKey", lineNum)
+        val sshKeyPassphrase = decodeBase64Field(fields[25], "sshKeyPassphrase", lineNum)
 
         // v12 new field: bridge lines (base64-encoded)
-        val torBridgeLines = try {
-            String(Base64.decode(fields[26], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
+        val torBridgeLines = decodeBase64Field(fields[26], "torBridgeLines", lineNum)
 
         if (name.isBlank()) {
             return ProfileParseResult.Error("Line $lineNum: Profile name is required")
@@ -1552,15 +1558,9 @@ class ConfigImporter @Inject constructor() {
         val dohUrl = fields[21]
         val dnsTransport = DnsTransport.fromValue(fields[22])
         val sshAuthType = SshAuthType.fromValue(fields[23])
-        val sshPrivateKey = try {
-            String(Base64.decode(fields[24], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
-        val sshKeyPassphrase = try {
-            String(Base64.decode(fields[25], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
-        val torBridgeLines = try {
-            String(Base64.decode(fields[26], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
+        val sshPrivateKey = decodeBase64Field(fields[24], "sshPrivateKey", lineNum)
+        val sshKeyPassphrase = decodeBase64Field(fields[25], "sshKeyPassphrase", lineNum)
+        val torBridgeLines = decodeBase64Field(fields[26], "torBridgeLines", lineNum)
 
         // v13 new field: DNSTT authoritative mode
         val dnsttAuthoritative = fields[27] == "1"
@@ -1698,23 +1698,15 @@ class ConfigImporter @Inject constructor() {
         val dohUrl = fields[21]
         val dnsTransport = DnsTransport.fromValue(fields[22])
         val sshAuthType = SshAuthType.fromValue(fields[23])
-        val sshPrivateKey = try {
-            String(Base64.decode(fields[24], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
-        val sshKeyPassphrase = try {
-            String(Base64.decode(fields[25], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
-        val torBridgeLines = try {
-            String(Base64.decode(fields[26], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
+        val sshPrivateKey = decodeBase64Field(fields[24], "sshPrivateKey", lineNum)
+        val sshKeyPassphrase = decodeBase64Field(fields[25], "sshKeyPassphrase", lineNum)
+        val torBridgeLines = decodeBase64Field(fields[26], "torBridgeLines", lineNum)
         val dnsttAuthoritative = fields[27] == "1"
 
         // v14 new fields: NaiveProxy
         val naivePort = fields[28].toIntOrNull() ?: 443
         val naiveUsername = fields[29]
-        val naivePassword = try {
-            String(Base64.decode(fields[30], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
+        val naivePassword = decodeBase64Field(fields[30], "naivePassword", lineNum)
         // fields[31] was naiveSni (removed) — ignored if present
 
         if (name.isBlank()) {
@@ -1861,21 +1853,13 @@ class ConfigImporter @Inject constructor() {
         val dohUrl = fields[21]
         val dnsTransport = DnsTransport.fromValue(fields[22])
         val sshAuthType = SshAuthType.fromValue(fields[23])
-        val sshPrivateKey = try {
-            String(Base64.decode(fields[24], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
-        val sshKeyPassphrase = try {
-            String(Base64.decode(fields[25], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
-        val torBridgeLines = try {
-            String(Base64.decode(fields[26], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
+        val sshPrivateKey = decodeBase64Field(fields[24], "sshPrivateKey", lineNum)
+        val sshKeyPassphrase = decodeBase64Field(fields[25], "sshKeyPassphrase", lineNum)
+        val torBridgeLines = decodeBase64Field(fields[26], "torBridgeLines", lineNum)
         val dnsttAuthoritative = fields[27] == "1"
         val naivePort = fields[28].toIntOrNull() ?: 443
         val naiveUsername = fields[29]
-        val naivePassword = try {
-            String(Base64.decode(fields[30], Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (_: Exception) { "" }
+        val naivePassword = decodeBase64Field(fields[30], "naivePassword", lineNum)
 
         // v15 new fields: locked profile
         val isLocked = fields[31] == "1"
@@ -2137,9 +2121,7 @@ class ConfigImporter @Inject constructor() {
 
         // SSH payload (position 59, base64-encoded)
         val sshPayload = if (fields.size > 59) {
-            try {
-                String(android.util.Base64.decode(fields[59], android.util.Base64.NO_WRAP), Charsets.UTF_8)
-            } catch (_: Exception) { "" }
+            decodeBase64Field(fields[59], "sshPayload", lineNum)
         } else ""
 
         val profile = baseResult.profile.copy(
