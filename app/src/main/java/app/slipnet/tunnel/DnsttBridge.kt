@@ -6,7 +6,6 @@ import app.slipnet.util.AppLog as Log
 import mobile.Mobile
 import mobile.DnsttClient
 import java.lang.ref.WeakReference
-import java.net.ServerSocket
 
 /**
  * Bridge to the Go-based DNSTT library.
@@ -90,11 +89,11 @@ object DnsttBridge {
         // Try the preferred port first; if still held by a draining Go instance,
         // immediately fall back to an alternative instead of waiting 10s.
         var actualPort = listenPort
-        if (isPortInUse(listenPort)) {
+        if (PortUtils.isPortInUse(TAG, listenPort)) {
             Log.w(TAG, "Port $listenPort still in use, scanning for alternative port")
             var found = false
             for (alt in (listenPort + 1)..(listenPort + 10)) {
-                if (!isPortInUse(alt)) {
+                if (!PortUtils.isPortInUse(TAG, alt)) {
                     Log.i(TAG, "Using alternative port $alt (preferred $listenPort was still draining)")
                     actualPort = alt
                     found = true
@@ -104,7 +103,7 @@ object DnsttBridge {
             if (!found) {
                 // All alternatives busy — wait briefly for the primary port as last resort
                 Log.w(TAG, "All alternative ports busy, waiting up to 3s for port $listenPort")
-                if (!waitForPortAvailable(listenPort, 3_000)) {
+                if (!PortUtils.waitForPortAvailable(TAG, listenPort, 3_000)) {
                     return Result.failure(RuntimeException("Port $listenPort is still in use by a previous DNSTT instance"))
                 }
             }
@@ -157,7 +156,7 @@ object DnsttBridge {
                 Log.i(TAG, "DNSTT client started successfully on port $actualPort")
 
                 // Verify SOCKS5 proxy is listening
-                if (verifySocks5Listening(listenHost, actualPort)) {
+                if (PortUtils.canConnect(TAG, listenHost, actualPort)) {
                     Log.d(TAG, "SOCKS5 proxy verified listening on $listenHost:$actualPort")
                 } else {
                     Log.w(TAG, "SOCKS5 proxy verification failed, but client reports running")
@@ -215,9 +214,9 @@ object DnsttBridge {
         // Wait for port release even when client is already null — a previous
         // stopClient() may have cleared the reference while Go is still dying.
         if (port > 0) {
-            val portFree = if (isPortInUse(port)) {
+            val portFree = if (PortUtils.isPortInUse(TAG, port)) {
                 Log.w(TAG, "Port $port still in use after DNSTT stop, waiting briefly...")
-                waitForPortAvailable(port, 1000)
+                PortUtils.waitForPortAvailable(TAG, port, 1000)
             } else {
                 true
             }
@@ -261,42 +260,4 @@ object DnsttBridge {
         }
     }
 
-    private fun waitForPortAvailable(port: Int, maxWaitMs: Long = 5000): Boolean {
-        val startTime = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startTime < maxWaitMs) {
-            if (!isPortInUse(port)) {
-                return true
-            }
-            Log.d(TAG, "Waiting for port $port to be released...")
-            Thread.sleep(50)
-        }
-        return !isPortInUse(port)
-    }
-
-    private fun isPortInUse(port: Int): Boolean {
-        return try {
-            ServerSocket().use { serverSocket ->
-                serverSocket.reuseAddress = true
-                serverSocket.bind(java.net.InetSocketAddress("127.0.0.1", port))
-                false
-            }
-        } catch (e: java.net.BindException) {
-            true
-        } catch (e: Exception) {
-            Log.w(TAG, "Error checking port $port: ${e.message}")
-            true
-        }
-    }
-
-    private fun verifySocks5Listening(host: String, port: Int): Boolean {
-        return try {
-            java.net.Socket().use { socket ->
-                socket.connect(java.net.InetSocketAddress(host, port), 2000)
-                true
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "SOCKS5 verify failed: ${e.message}")
-            false
-        }
-    }
 }

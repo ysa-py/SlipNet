@@ -8,14 +8,6 @@ import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.SecureRandom
-import java.security.cert.X509Certificate
-import javax.net.ssl.SNIHostName
-import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLParameters
-import javax.net.ssl.SSLSocket
-import javax.net.ssl.SSLSocketFactory
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * JSch [Proxy] that tunnels SSH through a WebSocket connection.
@@ -85,14 +77,7 @@ class ProxyWebSocket(
         // Step 2: Optional TLS (trust all certs for self-signed StunTLS servers)
         val activeSocket: Socket = if (useTls) {
             val sniHost = tlsSni.ifBlank { wsHost }
-            val sslFactory = trustAllSslFactory()
-            val sslSocket = sslFactory.createSocket(rawSocket, sniHost, wsPort, true) as SSLSocket
-            val params = sslSocket.sslParameters
-            params.serverNames = listOf(SNIHostName(sniHost))
-            sslSocket.sslParameters = params
-            sslSocket.startHandshake()
-            Log.i(TAG, "TLS handshake complete (${sslSocket.session.protocol})")
-            sslSocket
+            TlsUtils.upgradeToTls(rawSocket, sniHost, wsPort, TAG)
         } else {
             rawSocket
         }
@@ -342,16 +327,5 @@ class ProxyWebSocket(
             off += n
         }
         return buf
-    }
-
-    private fun trustAllSslFactory(): SSLSocketFactory {
-        val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-        })
-        val ctx = SSLContext.getInstance("TLS")
-        ctx.init(null, trustAll, SecureRandom())
-        return ctx.socketFactory
     }
 }

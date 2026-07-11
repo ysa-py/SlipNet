@@ -3,7 +3,6 @@ package app.slipnet.widget
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.view.View
@@ -25,29 +24,18 @@ class VpnWidgetCompactProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        val state = if (::connectionManager.isInitialized) {
-            connectionManager.connectionState.value
-        } else {
-            ConnectionState.Disconnected
-        }
-
-        for (appWidgetId in appWidgetIds) {
-            val views = buildRemoteViews(context, state)
-            appWidgetManager.updateAppWidget(appWidgetId, views)
+        val state = WidgetUpdater.stateOrDisconnected(
+            if (::connectionManager.isInitialized) connectionManager else null
+        )
+        WidgetUpdater.updateWidgets(appWidgetManager, appWidgetIds, state) {
+            buildRemoteViews(context, it)
         }
     }
 
     companion object {
         fun notifyStateChanged(context: Context, state: ConnectionState) {
-            val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
-            val componentName = ComponentName(context, VpnWidgetCompactProvider::class.java)
-            val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
-
-            if (appWidgetIds.isEmpty()) return
-
-            val views = buildRemoteViews(context, state)
-            for (appWidgetId in appWidgetIds) {
-                appWidgetManager.updateAppWidget(appWidgetId, views)
+            WidgetUpdater.notifyStateChanged(context, VpnWidgetCompactProvider::class.java, state) {
+                buildRemoteViews(context, it)
             }
         }
 

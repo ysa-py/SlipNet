@@ -9,7 +9,6 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -17,8 +16,6 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.net.ssl.SNIHostName
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * VLESS tunnel bridge for Cloudflare CDN with SNI fragmentation.
@@ -256,7 +253,7 @@ object VlessBridge {
             } else {
                 val sni = resolveSni()
                 val sslCtx = SSLContext.getInstance("TLS")
-                sslCtx.init(null, trustAllManagers(), SecureRandom())
+                sslCtx.init(null, TlsUtils.trustAllManagers(), SecureRandom())
                 val ssl = sslCtx.socketFactory.createSocket(sock, sni, cdnPort, true) as SSLSocket
                 ssl.sslParameters = ssl.sslParameters.apply {
                     serverNames = listOf(SNIHostName(sni))
@@ -413,7 +410,7 @@ object VlessBridge {
             } else {
                 val sni = resolveSni()
                 val sslCtx = SSLContext.getInstance("TLS")
-                sslCtx.init(null, trustAllManagers(), SecureRandom())
+                sslCtx.init(null, TlsUtils.trustAllManagers(), SecureRandom())
                 val sslSocket = sslCtx.socketFactory.createSocket(raw, sni, cdnPort, true) as SSLSocket
                 sslSocket.sslParameters = sslSocket.sslParameters.apply {
                     serverNames = listOf(SNIHostName(sni))
@@ -917,12 +914,6 @@ object VlessBridge {
         result.addAll(right)
         return result
     }
-
-    private fun trustAllManagers(): Array<TrustManager> = arrayOf(object : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-    })
 
     private fun bindServerSocket(host: String, port: Int): ServerSocket {
         for (attempt in 0 until BIND_MAX_RETRIES) {
